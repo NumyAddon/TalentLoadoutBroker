@@ -1,0 +1,9 @@
+## Interface: @toc-version-retail@
+## Title: Talent Loadout Broker
+## Version: @project-version@
+## Notes: Data broker plugin to switch talent loadouts
+## Author: Numy
+## X-Curse-Project-ID: xxxx
+
+libs\load_libs.xml
+TalentLoadoutBroker.lua
