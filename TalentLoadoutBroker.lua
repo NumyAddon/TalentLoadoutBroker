@@ -10,9 +10,9 @@ function ns:Init()
     self.dropDown:Hide()
 
     self.menuList = nil
-    self.configIDs, self.configIDToName, self.selectedConfigId = nil, nil, nil
+    self.configIDs, self.configIDToName, self.currentConfigID = nil, nil, nil
     self.updatePending, self.pendingDisableStarterBuild, self.pendingConfigID = false, false, nil
-    self.oldSelectedConfigId = nil
+    self.currentConfigID = nil
 
     self.TalentLoudoutLDB = LibStub('LibDataBroker-1.1'):NewDataObject(
             'Talent Loadout',
@@ -43,37 +43,22 @@ function ns:Init()
     self.eventFrame:SetScript('OnEvent', function(_, event, ...)
         self[event](self, ...)
     end)
+    hooksecurefunc(C_ClassTalents, 'UpdateLastSelectedSavedConfigID', function()
+        if self.ignoreHook then return; end
+        self:RefreshLoadoutOptions();
+    end)
 end
 
-function ns:SelectLoadout(configID, configName)
-    local loadResult
-    if configID == self.selectedConfigId then
-        return
-    elseif configID == starterConfigID then
-        loadResult = C_ClassTalents.SetStarterBuildActive(true);
-    else
-        loadResult = C_ClassTalents.LoadConfig(configID, true);
-    end
-    if loadResult ~= Enum.LoadConfigResult.Error then
-        self:SetText(configName);
-    end
-    if loadResult == Enum.LoadConfigResult.NoChangesNecessary then
-        if self.oldSelectedConfigId == starterConfigID then C_ClassTalents.SetStarterBuildActive(false); end
-        C_ClassTalents.UpdateLastSelectedSavedConfigID(PlayerUtil.GetCurrentSpecID(), configID);
-    elseif loadResult == Enum.LoadConfigResult.LoadInProgress then
-        if self.oldSelectedConfigId == starterConfigID then self.pendingDisableStarterBuild = true; end
-        self.updatePending = true;
-        self.pendingConfigID = configID;
-    end
+function ns:SetText(text)
+    self.TalentLoudoutLDB.text = textPrefix .. text
 end
 
 function ns:RefreshLoadoutOptions()
     local specID = PlayerUtil.GetCurrentSpecID()
     if not specID then return end
-    self.selectedConfigId =
+    self.currentConfigID =
         C_ClassTalents.GetLastSelectedSavedConfigID(specID)
-        or (C_ClassTalents.GetStarterBuildActive() and starterConfigID)
-    self.oldSelectedConfigId = self.selectedConfigId;
+        or (C_ClassTalents.GetStarterBuildActive() and starterConfigID);
     self.configIDs = C_ClassTalents.GetConfigIDsBySpecID(specID);
 
     self.configIDToName = {};
@@ -82,7 +67,7 @@ function ns:RefreshLoadoutOptions()
         self.configIDToName[configID] = (configInfo and configInfo.name) or '';
     end
 
-    if not self.selectedConfigId then
+    if not self.currentConfigID then
         table.insert(self.configIDs, 0)
         self.configIDToName[0] = LIGHTGRAY_FONT_COLOR:WrapTextInColorCode(TALENT_FRAME_DROP_DOWN_DEFAULT);
     end
@@ -95,9 +80,9 @@ function ns:RefreshLoadoutOptions()
 
     self.menuList = {};
     for configID, configName in pairs(self.configIDToName) do
-        local checked = (not self.updatePending and configID == 0 and self.selectedConfigId == nil)
+        local checked = (not self.updatePending and configID == 0 and self.currentConfigID == nil)
             or (self.updatePending and self.pendingConfigID == configID)
-            or (not self.updatePending and self.selectedConfigId == configID);
+            or (not self.updatePending and self.currentConfigID == configID);
         table.insert(self.menuList, {
             text = configName,
             arg1 = configID,
@@ -111,17 +96,32 @@ function ns:RefreshLoadoutOptions()
     LibDD:EasyMenu(self.menuList, self.dropDown, self.dropDown, 0, 0);
 end
 
-function ns:SetText(text)
-    self.TalentLoudoutLDB.text = textPrefix .. text
+function ns:SelectLoadout(configID, configName)
+    local loadResult
+    if configID == self.currentConfigID then
+        return
+    elseif configID == starterConfigID then
+        loadResult = C_ClassTalents.SetStarterBuildActive(true);
+    else
+        loadResult = C_ClassTalents.LoadConfig(configID, true);
+    end
+    if loadResult ~= Enum.LoadConfigResult.Error then
+        self:SetText(DIM_GREEN_FONT_COLOR:WrapTextInColorCode('switching ') .. configName);
+    end
+    if loadResult == Enum.LoadConfigResult.NoChangesNecessary then
+        if self.currentConfigID == starterConfigID then C_ClassTalents.SetStarterBuildActive(false); end
+        self:UpdateLastSelectedSavedConfigID(configID);
+    elseif loadResult == Enum.LoadConfigResult.LoadInProgress then
+        if self.currentConfigID == starterConfigID then self.pendingDisableStarterBuild = true; end
+        self.updatePending = true;
+        self.pendingConfigID = configID;
+    end
 end
 
-function ns:CONFIG_COMMIT_FAILED(configID)
-    if configID ~= C_ClassTalents.GetActiveConfigID() then return end
-    if self.updatePending then
-        self.updatePending = false
-        if self.oldSelectedConfigId == starterConfigID and not C_ClassTalents.GetStarterBuildActive() then C_ClassTalents.SetStarterBuildActive(true); end
-        C_ClassTalents.UpdateLastSelectedSavedConfigID(PlayerUtil.GetCurrentSpecID(), self.oldSelectedConfigId);
-    end
+function ns:UpdateLastSelectedSavedConfigID(configID)
+    self.ignoreHook = true;
+    C_ClassTalents.UpdateLastSelectedSavedConfigID(PlayerUtil.GetCurrentSpecID(), configID);
+    self.ignoreHook = false;
 end
 
 function ns:TRAIT_CONFIG_UPDATED(configID)
@@ -129,11 +129,20 @@ function ns:TRAIT_CONFIG_UPDATED(configID)
     if self.updatePending then
         self.updatePending = false;
         if self.pendingDisableStarterBuild then C_ClassTalents.SetStarterBuildActive(false); end
-        C_ClassTalents.UpdateLastSelectedSavedConfigID(PlayerUtil.GetCurrentSpecID(), self.pendingConfigID);
+        self:UpdateLastSelectedSavedConfigID(self.pendingConfigID);
         self:SetText(self.configIDToName[self.pendingConfigID] or 'Unknown');
         self.updatePending, self.pendingDisableStarterBuild, self.pendingConfigID = false, false, nil
     end
     self:RefreshLoadoutOptions();
+end
+
+function ns:CONFIG_COMMIT_FAILED(configID)
+    if configID ~= C_ClassTalents.GetActiveConfigID() then return end
+    if self.updatePending then
+        self.updatePending = false;
+        if self.currentConfigID == starterConfigID and not C_ClassTalents.GetStarterBuildActive() then C_ClassTalents.SetStarterBuildActive(true); end
+        self:UpdateLastSelectedSavedConfigID(self.currentConfigID);
+    end
 end
 
 function ns:SPELLS_CHANGED()
