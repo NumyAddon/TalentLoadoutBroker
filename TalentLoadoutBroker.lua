@@ -139,9 +139,21 @@ end
 function ns:CONFIG_COMMIT_FAILED(configID)
     if configID ~= C_ClassTalents.GetActiveConfigID() then return end
     if self.updatePending then
-        self.updatePending = false;
-        if self.currentConfigID == starterConfigID and not C_ClassTalents.GetStarterBuildActive() then C_ClassTalents.SetStarterBuildActive(true); end
-        self:UpdateLastSelectedSavedConfigID(self.currentConfigID);
+        local currentConfigID = self.currentConfigID
+        local configName = self.configIDToName[currentConfigID] or 'Unknown'
+        C_Timer.After(0, function() -- next frame, because the default UI will overwrite anything we do here -.-
+            self.updatePending = false;
+            if currentConfigID == starterConfigID then
+                C_Traits.RollbackConfig(C_ClassTalents.GetActiveConfigID());
+                C_Timer.After(1, function()
+                    C_ClassTalents.SetStarterBuildActive(true);
+                    self:UpdateLastSelectedSavedConfigID(currentConfigID);
+                end)
+            end
+            self:UpdateLastSelectedSavedConfigID(currentConfigID);
+            self:SetText(configName);
+        end)
+        self.updatePending, self.pendingDisableStarterBuild, self.pendingConfigID = false, false, nil
     end
 end
 
