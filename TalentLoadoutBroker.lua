@@ -12,15 +12,13 @@ function ns:Init()
     self.menuList = nil
     self.configIDs, self.configIDToName, self.selectedConfigId = nil, nil, nil
     self.updatePending, self.pendingDisableStarterBuild, self.pendingConfigID = false, false, nil
-    self.oldConfigIDs, self.oldConfigNames, self.oldSelectedConfigId = nil, nil, nil
+    self.oldSelectedConfigId = nil
 
     self.TalentLoudoutLDB = LibStub('LibDataBroker-1.1'):NewDataObject(
             'Talent Loadout',
             {
                 type = 'data source',
                 text = 'Talent Loadout',
-                label = 'Talent Loadout',
-                icon = 'interface/icons/inv_misc_book_11.blp',
                 OnClick = function(brokerFrame, button)
                     if button == 'LeftButton' then
                         self:RefreshLoadoutOptions()
@@ -41,7 +39,7 @@ function ns:Init()
     self.eventFrame = CreateFrame('Frame')
     self.eventFrame:RegisterEvent('TRAIT_CONFIG_UPDATED')
     self.eventFrame:RegisterEvent('CONFIG_COMMIT_FAILED')
-    self.eventFrame:RegisterEvent('PLAYER_ENTERING_WORLD')
+    self.eventFrame:RegisterEvent('SPELLS_CHANGED')
     self.eventFrame:SetScript('OnEvent', function(_, event, ...)
         self[event](self, ...)
     end)
@@ -53,7 +51,6 @@ function ns:SelectLoadout(configID, configName)
         return
     elseif configID == starterConfigID then
         loadResult = C_ClassTalents.SetStarterBuildActive(true);
-        C_ClassTalents.LoadConfig(configID, true);
     else
         loadResult = C_ClassTalents.LoadConfig(configID, true);
     end
@@ -71,14 +68,12 @@ function ns:SelectLoadout(configID, configName)
 end
 
 function ns:RefreshLoadoutOptions()
-    self.oldConfigIDs = self.configIDs;
-    self.oldConfigNames = self.configIDToName;
-    self.oldSelectedConfigId = self.selectedConfigId;
     local specID = PlayerUtil.GetCurrentSpecID()
     if not specID then return end
     self.selectedConfigId =
-    C_ClassTalents.GetLastSelectedSavedConfigID(specID)
+        C_ClassTalents.GetLastSelectedSavedConfigID(specID)
         or (C_ClassTalents.GetStarterBuildActive() and starterConfigID)
+    self.oldSelectedConfigId = self.selectedConfigId;
     self.configIDs = C_ClassTalents.GetConfigIDsBySpecID(specID);
 
     self.configIDToName = {};
@@ -124,7 +119,7 @@ function ns:CONFIG_COMMIT_FAILED(configID)
     if configID ~= C_ClassTalents.GetActiveConfigID() then return end
     if self.updatePending then
         self.updatePending = false
-        if self.oldSelectedConfigId == starterConfigID then C_ClassTalents.SetStarterBuildActive(true); end
+        if self.oldSelectedConfigId == starterConfigID and not C_ClassTalents.GetStarterBuildActive() then C_ClassTalents.SetStarterBuildActive(true); end
         C_ClassTalents.UpdateLastSelectedSavedConfigID(PlayerUtil.GetCurrentSpecID(), self.oldSelectedConfigId);
     end
 end
@@ -136,13 +131,14 @@ function ns:TRAIT_CONFIG_UPDATED(configID)
         if self.pendingDisableStarterBuild then C_ClassTalents.SetStarterBuildActive(false); end
         C_ClassTalents.UpdateLastSelectedSavedConfigID(PlayerUtil.GetCurrentSpecID(), self.pendingConfigID);
         self:SetText(self.configIDToName[self.pendingConfigID] or 'Unknown');
+        self.updatePending, self.pendingDisableStarterBuild, self.pendingConfigID = false, false, nil
     end
     self:RefreshLoadoutOptions();
 end
 
-function ns:PLAYER_ENTERING_WORLD()
+function ns:SPELLS_CHANGED()
     self:RefreshLoadoutOptions();
-    self.eventFrame:UnregisterEvent('PLAYER_ENTERING_WORLD');
+    self.eventFrame:UnregisterEvent('SPELLS_CHANGED');
 end
 
 do ns:Init() end
