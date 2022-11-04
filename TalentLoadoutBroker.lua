@@ -112,7 +112,7 @@ function ns:SetText(loadoutName, specName, specIcon, isSwitching)
     self.displaySpecIcon = specIcon or self.displaySpecIcon
     if isSwitching ~= nil then self.displayIsSwitching = isSwitching end
 
-    local text = NORMAL_FONT_COLOR:WrapTextInColorCode('TL:')
+    local text = ''
     if self.displayIsSwitching then
         text = text .. DIM_GREEN_FONT_COLOR:WrapTextInColorCode('switching ')
     end
