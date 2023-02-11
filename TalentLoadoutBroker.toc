@@ -3,7 +3,9 @@
 ## Version: @project-version@
 ## Notes: Data broker plugin to switch talent loadouts
 ## Author: Numy
+## SavedVariables: TalentLoadoutBrokerDB
 ## X-Curse-Project-ID: 694013
 
 libs\load_libs.xml
 TalentLoadoutBroker.lua
+config.lua
