@@ -25,7 +25,7 @@ function TLB:Init()
         SLASH_TALENT_LOADOUT_BROKER1 = '/tlb';
         SLASH_TALENT_LOADOUT_BROKER2 = '/talentloadoutbroker';
         SlashCmdList['TALENT_LOADOUT_BROKER'] = function() ns.Config:OpenConfig(); end
-    end)
+    end);
 
     self.dropDown = LibDD:Create_UIDropDownMenu(nil, UIParent);
     self.dropDown:Hide();
@@ -183,44 +183,64 @@ end
 function TLB:RefreshMenuListLoadouts()
     local specID = PlayerUtil.GetCurrentSpecID();
     if not specID then return; end
-    self.currentConfigID =
+
+    if not TalentLoadoutManagerAPI then
+        self.currentConfigID =
         C_ClassTalents.GetLastSelectedSavedConfigID(specID)
-        or (C_ClassTalents.GetStarterBuildActive() and starterConfigID);
-    self.configIDs = C_ClassTalents.GetConfigIDsBySpecID(specID);
+                or (C_ClassTalents.GetStarterBuildActive() and starterConfigID);
+        self.configIDs = C_ClassTalents.GetConfigIDsBySpecID(specID);
 
-    self.configIDToName = {};
-    for _, configID in ipairs(self.configIDs) do
-        local configInfo = C_Traits.GetConfigInfo(configID);
-        self.configIDToName[configID] = (configInfo and configInfo.name) or '';
-    end
+        self.configIDToName = {};
+        for _, configID in ipairs(self.configIDs) do
+            local configInfo = C_Traits.GetConfigInfo(configID);
+            self.configIDToName[configID] = (configInfo and configInfo.name) or '';
+        end
 
-    if not self.currentConfigID then
-        table.insert(self.configIDs, 0);
-        self.configIDToName[0] = LIGHTGRAY_FONT_COLOR:WrapTextInColorCode(TALENT_FRAME_DROP_DOWN_DEFAULT);
-    end
+        if not self.currentConfigID then
+            table.insert(self.configIDs, 0);
+            self.configIDToName[0] = LIGHTGRAY_FONT_COLOR:WrapTextInColorCode(TALENT_FRAME_DROP_DOWN_DEFAULT);
+        end
 
-    -- If spec has a starter build, add Starter Build as a dropdown option
-    if C_ClassTalents.GetHasStarterBuild() then
-        table.insert(self.configIDs, starterConfigID);
-        self.configIDToName[starterConfigID] = BLUE_FONT_COLOR:WrapTextInColorCode(TALENT_FRAME_DROP_DOWN_STARTER_BUILD);
-    end
+        -- If spec has a starter build, add Starter Build as a dropdown option
+        if C_ClassTalents.GetHasStarterBuild() then
+            table.insert(self.configIDs, starterConfigID);
+            self.configIDToName[starterConfigID] = BLUE_FONT_COLOR:WrapTextInColorCode(TALENT_FRAME_DROP_DOWN_STARTER_BUILD);
+        end
 
-    self.menuList.loadout = Mixin({}, self.menuListDefaults.loadout);
-    local function onClick(_, configID, configName) self:SelectLoadout(configID, configName);  end
-    for configID, configName in pairs(self.configIDToName) do
-        local checked =
+        self.menuList.loadout = Mixin({}, self.menuListDefaults.loadout);
+        local function onClick(_, configID, configName) self:SelectLoadout(configID, configName);  end
+        for configID, configName in pairs(self.configIDToName) do
+            local checked =
             (not self.updatePending and configID == 0 and self.currentConfigID == nil)
-            or (self.updatePending and self.pendingConfigID == configID)
-            or (not self.updatePending and self.currentConfigID == configID);
-        table.insert(self.menuList.loadout, {
-            text = configName,
-            arg1 = configID,
-            arg2 = configName,
-            func = onClick,
-            checked = checked,
-            notClickable = self.updatePending or checked,
-        });
-        if checked then self:SetTextLoadout(configName); end
+                    or (self.updatePending and self.pendingConfigID == configID)
+                    or (not self.updatePending and self.currentConfigID == configID);
+            table.insert(self.menuList.loadout, {
+                text = configName,
+                arg1 = configID,
+                arg2 = configName,
+                func = onClick,
+                checked = checked,
+                notClickable = self.updatePending or checked,
+            });
+            if checked then self:SetTextLoadout(configName); end
+        end
+    else
+        local API = TalentLoadoutManagerAPI;
+
+        self.menuList.loadout = Mixin({}, self.menuListDefaults.loadout);
+        local function onClick(_, loadoutID) API.CharacterAPI:LoadLoadout(loadoutID, true); end
+        local activeLoadoutID = API.CharacterAPI:GetActiveLoadoutID();
+        for _, loadoutInfo in ipairs(API.GlobalAPI:GetLoadouts()) do
+            local checked = loadoutInfo.id == activeLoadoutID;
+            table.insert(self.menuList.loadout, {
+                text = loadoutInfo.displayName,
+                arg1 = loadoutInfo.id,
+                func = onClick,
+                checked = checked,
+                notClickable = self.updatePending or checked,
+            });
+            if checked then self:SetTextLoadout(loadoutInfo.displayName); end
+        end
     end
     LibDD:EasyMenu(self.menuList.loadout, self.dropDown, self.dropDown, 0, 0);
 end
@@ -392,6 +412,17 @@ end
 function TLB:SPELLS_CHANGED()
     self:RefreshMenuListLoadouts();
     self:RefreshMenuListSpecs();
+
+    EventUtil.ContinueOnAddOnLoaded('TalentLoadoutManager', function()
+        if not TalentLoadoutManagerAPI then return; end
+        RunNextFrame(function()
+            self:RefreshMenuListLoadouts();
+        end);
+
+        local API = TalentLoadoutManagerAPI;
+        API:RegisterCallback(API.Event.LoadoutListUpdated, self.RefreshMenuListLoadouts, self);
+        API:RegisterCallback(API.Event.CustomLoadoutApplied, self.RefreshMenuListLoadouts, self);
+    end);
 
     self.eventFrame:UnregisterEvent('SPELLS_CHANGED');
 end
