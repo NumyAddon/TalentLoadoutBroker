@@ -186,8 +186,8 @@ function TLB:RefreshMenuListLoadouts()
 
     if not TalentLoadoutManagerAPI then
         self.currentConfigID =
-        C_ClassTalents.GetLastSelectedSavedConfigID(specID)
-                or (C_ClassTalents.GetStarterBuildActive() and starterConfigID);
+            C_ClassTalents.GetLastSelectedSavedConfigID(specID)
+            or (C_ClassTalents.GetStarterBuildActive() and starterConfigID);
         self.configIDs = C_ClassTalents.GetConfigIDsBySpecID(specID);
 
         self.configIDToName = {};
@@ -211,9 +211,9 @@ function TLB:RefreshMenuListLoadouts()
         local function onClick(_, configID, configName) self:SelectLoadout(configID, configName);  end
         for configID, configName in pairs(self.configIDToName) do
             local checked =
-            (not self.updatePending and configID == 0 and self.currentConfigID == nil)
-                    or (self.updatePending and self.pendingConfigID == configID)
-                    or (not self.updatePending and self.currentConfigID == configID);
+                (not self.updatePending and configID == 0 and self.currentConfigID == nil)
+                or (self.updatePending and self.pendingConfigID == configID)
+                or (not self.updatePending and self.currentConfigID == configID);
             table.insert(self.menuList.loadout, {
                 text = configName,
                 arg1 = configID,
@@ -319,8 +319,8 @@ function TLB:SelectLoadout(configID, configName)
     end
     if loadResult == Enum.LoadConfigResult.NoChangesNecessary then
         if self.currentConfigID == starterConfigID then C_ClassTalents.SetStarterBuildActive(false); end
-        self.updatePending = true;
-        self.pendingConfigID = configID;
+        self.updatePending = false;
+        self.pendingConfigID = nil;
         self:UpdateLastSelectedSavedConfigID(configID);
     elseif loadResult == Enum.LoadConfigResult.LoadInProgress then
         if self.currentConfigID == starterConfigID then self.pendingDisableStarterBuild = true; end
@@ -350,6 +350,13 @@ function TLB:UpdateLastSelectedSavedConfigID(configID)
     self.ignoreHook = true;
     C_ClassTalents.UpdateLastSelectedSavedConfigID(PlayerUtil.GetCurrentSpecID(), configID);
     self.ignoreHook = false;
+
+    -- should hopefully be possible to remove this in 10.0.7
+    local _ = ClassTalentFrame
+        and ClassTalentFrame.TalentsTab
+        and ClassTalentFrame.TalentsTab.LoadoutDropDown
+        and ClassTalentFrame.TalentsTab.LoadoutDropDown.SetSelectionID
+        and ClassTalentFrame.TalentsTab.LoadoutDropDown:SetSelectionID(configID);
 end
 
 function TLB:TRAIT_CONFIG_UPDATED(configID)
