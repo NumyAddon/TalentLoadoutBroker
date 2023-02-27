@@ -148,6 +148,7 @@ function TLB:SetText(loadoutName, specName, specIcon, isSwitching, lootSpecName,
     if isSwitching ~= nil then self.displayIsSwitching = isSwitching; end
 
     local text = self.db.textFormat;
+    text = text:gsub('|', '||'); -- escape pipe characters
     local placeholderList = {
         ['%loadoutName%'] = '%%loadoutName%%',
         ['%specIcon%'] = '%%specIcon%%',
