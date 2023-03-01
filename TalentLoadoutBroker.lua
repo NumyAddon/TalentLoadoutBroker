@@ -13,12 +13,15 @@ function TLB:Init()
         TalentLoadoutBrokerDB = TalentLoadoutBrokerDB or {};
         self.db = TalentLoadoutBrokerDB;
         self.defaults = {
-            textFormat = '%switching%%specIcon%%specName%|%loadoutName%',
+            textFormat = '%switching%%specIcon%%specName%||%loadoutName%',
         };
         for k, v in pairs(self.defaults) do
             if self.db[k] == nil then
                 self.db[k] = v;
             end
+        end
+        if self.db.textFormat == '%switching%%specIcon%%specName%|%loadoutName%' then
+            self.db.textFormat = self.defaults.textFormat;
         end
 
         ns.Config:Initialize();
@@ -148,7 +151,6 @@ function TLB:SetText(loadoutName, specName, specIcon, isSwitching, lootSpecName,
     if isSwitching ~= nil then self.displayIsSwitching = isSwitching; end
 
     local text = self.db.textFormat;
-    text = text:gsub('|', '||'); -- escape pipe characters
     local placeholderList = {
         ['%loadoutName%'] = '%%loadoutName%%',
         ['%specIcon%'] = '%%specIcon%%',
