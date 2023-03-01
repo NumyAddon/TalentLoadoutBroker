@@ -231,6 +231,9 @@ function TLB:RefreshMenuListLoadouts()
         self.menuList.loadout = Mixin({}, self.menuListDefaults.loadout);
         local function onClick(_, loadoutID) API.CharacterAPI:LoadLoadout(loadoutID, true); end
         local activeLoadoutID = API.CharacterAPI:GetActiveLoadoutID();
+        if C_ClassTalents.GetActiveConfigID() == activeLoadoutID then
+            self:SetTextLoadout(LIGHTGRAY_FONT_COLOR:WrapTextInColorCode(TALENT_FRAME_DROP_DOWN_DEFAULT));
+        end
         for _, loadoutInfo in ipairs(API.GlobalAPI:GetLoadouts()) do
             local checked = loadoutInfo.id == activeLoadoutID;
             table.insert(self.menuList.loadout, {
