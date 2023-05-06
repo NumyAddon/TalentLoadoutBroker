@@ -3,7 +3,7 @@
 ## Version: @project-version@
 ## Notes: Data broker plugin to switch talent loadouts
 ## Author: Numy
-## IconTexture: 982414
+## IconTexture: Interface\Addons\TalentLoadoutBroker\media\icon
 ## SavedVariables: TalentLoadoutBrokerDB
 ## X-Curse-Project-ID: 694013
 
