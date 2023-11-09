@@ -2,6 +2,6 @@ externals:
     libs/LibStub: https://repos.wowace.com/wow/ace3/trunk/LibStub
     libs/CallbackHandler-1.0: https://repos.wowace.com/wow/ace3/trunk/CallbackHandler-1.0
     libs/LibDataBroker-1.1: https://github.com/tekkub/libdatabroker-1-1
-    libs/LibUIDropDownMenu: https://repos.curseforge.com/wow/libuidropdownmenu/trunk/LibUIDropDownMenu
+    libs/LibUIDropDownMenu: https://github.com/NumyAddon/LibUIDropDownMenu
     Libs/AceGUI-3.0: https://repos.wowace.com/wow/ace3/trunk/AceGUI-3.0
     libs/AceConfig-3.0: https://repos.wowace.com/wow/ace3/trunk/AceConfig-3.0

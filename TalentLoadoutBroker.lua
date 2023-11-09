@@ -5,7 +5,7 @@ ns.TLB = {};
 local TLB = ns.TLB;
 
 --- @type LibUIDropDownMenu
-local LibDD = LibStub:GetLibrary('LibUIDropDownMenu-4.0');
+local LibDD = LibStub('LibUIDropDownMenuNumy-4.0');
 local starterConfigID = Constants.TraitConsts.STARTER_BUILD_TRAIT_CONFIG_ID;
 
 function TLB:Init()
