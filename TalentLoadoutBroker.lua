@@ -236,19 +236,104 @@ function TLB:RefreshMenuListLoadouts()
         if C_ClassTalents.GetActiveConfigID() == activeLoadoutID then
             self:SetTextLoadout(LIGHTGRAY_FONT_COLOR:WrapTextInColorCode(TALENT_FRAME_DROP_DOWN_DEFAULT));
         end
+        local loadouts = {};
         for _, loadoutInfo in ipairs(API.GlobalAPI:GetLoadouts()) do
             local checked = loadoutInfo.id == activeLoadoutID;
-            table.insert(self.menuList.loadout, {
-                text = loadoutInfo.displayName,
-                arg1 = loadoutInfo.id,
-                func = onClick,
+            loadoutInfo.parentID = loadoutInfo.parentMapping and loadoutInfo.parentMapping[0];
+            table.insert(loadouts, {
+                text = loadoutInfo.parentID and ('  ||  '..loadoutInfo.displayName) or loadoutInfo.displayName,
+                id = loadoutInfo.id,
                 checked = checked,
-                notClickable = self.updatePending or checked,
+                data = loadoutInfo,
+                parentID = loadoutInfo.parentID,
             });
             if checked then self:SetTextLoadout(loadoutInfo.displayName); end
         end
+        self:SortTLMLoadouts(loadouts);
+        for _, info in ipairs(loadouts) do
+            table.insert(self.menuList.loadout, {
+                text = info.text,
+                arg1 = info.id,
+                func = onClick,
+                checked = info.checked,
+                notClickable = self.updatePending or info.checked,
+            });
+        end
     end
     LibDD:EasyMenu(self.menuList.loadout, self.dropDown, self.dropDown, 0, 0);
+end
+
+function TLB:SortTLMLoadouts(loadouts)
+    --- order by:
+    --- 1. playerIsOwner
+    --- 2. isBlizzardLoadout
+    --- 3. name (todo: make this optional?)
+    --- 4. id (basically, the order they were created?)
+    ---
+    --- custom loadouts are listed underneath their parent, if any
+
+    local function compare(a, b)
+        if not b then
+            return false;
+        end
+
+        if a.data.playerIsOwner and not b.data.playerIsOwner then
+            return true;
+        elseif not a.data.playerIsOwner and b.data.playerIsOwner then
+            return false;
+        end
+
+        if a.data.isBlizzardLoadout and not b.data.isBlizzardLoadout then
+            return true;
+        elseif not a.data.isBlizzardLoadout and b.data.isBlizzardLoadout then
+            return false;
+        end
+
+        if a.data.displayName < b.data.displayName then
+            return true;
+        elseif a.data.displayName > b.data.displayName then
+            return false;
+        end
+
+        if a.data.id < b.data.id then
+            return true;
+        elseif a.data.id > b.data.id then
+            return false;
+        end
+
+        return false;
+    end
+
+    local elements = CopyTable(loadouts);
+
+    table.sort(elements, compare);
+    local lookup = {};
+    for index, element in ipairs(elements) do
+        element.order = index;
+        element.subOrder = 0;
+        lookup[element.data.id] = element;
+    end
+
+    for index, element in ipairs(elements) do
+        local parentIndex = element.parentID and lookup[element.parentID] and lookup[element.parentID].order;
+        if parentIndex then
+            element.order = parentIndex;
+            element.subOrder = index;
+        end
+    end
+
+    table.sort(loadouts, function(a, b)
+        if not b then
+            return false;
+        end
+        a = lookup[a.data.id];
+        b = lookup[b.data.id];
+
+        if a.order == b.order then
+            return a.subOrder < b.subOrder;
+        end
+        return a.order < b.order;
+    end);
 end
 
 function TLB:RefreshMenuListSpecs()
