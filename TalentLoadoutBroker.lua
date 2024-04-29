@@ -437,17 +437,27 @@ function TLB:SelectLootSpec(specID)
     self:SetTextLootSpec(name, icon);
 end
 
+local function secureSetNil(table, key)
+    TextureLoadingGroupMixin.RemoveTexture({textures = table}, key);
+end
 function TLB:UpdateLastSelectedSavedConfigID(configID)
     self.ignoreHook = true;
     C_ClassTalents.UpdateLastSelectedSavedConfigID(PlayerUtil.GetCurrentSpecID(), configID);
     self.ignoreHook = false;
 
-    -- should hopefully be possible to remove this in 10.0.7
+    -- this horrible workaround should not be needed once blizzard actually fires SELECTED_LOADOUT_CHANGED event
+    -- or you know.. realizes that it's possible for addons to change the loadout, but we can't do that without tainting all the things
     local _ = ClassTalentFrame
         and ClassTalentFrame.TalentsTab
         and ClassTalentFrame.TalentsTab.LoadoutDropDown
         and ClassTalentFrame.TalentsTab.LoadoutDropDown.SetSelectionID
         and ClassTalentFrame.TalentsTab.LoadoutDropDown:SetSelectionID(configID);
+    -- this seems to reduce the amount of tainted values, but I didn't really dig into it
+    local _ = ClassTalentFrame
+        and ClassTalentFrame.TalentsTab
+        and ClassTalentFrame.TalentsTab.LoadoutDropDown
+        and ClassTalentFrame.TalentsTab.LoadoutDropDown.DropDownControl
+        and secureSetNil(ClassTalentFrame.TalentsTab.LoadoutDropDown.DropDownControl, 'selectedValue');
 end
 
 function TLB:TRAIT_CONFIG_UPDATED(configID)
