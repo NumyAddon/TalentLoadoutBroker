@@ -447,17 +447,12 @@ function TLB:UpdateLastSelectedSavedConfigID(configID)
 
     -- this horrible workaround should not be needed once blizzard actually fires SELECTED_LOADOUT_CHANGED event
     -- or you know.. realizes that it's possible for addons to change the loadout, but we can't do that without tainting all the things
-    local _ = ClassTalentFrame
-        and ClassTalentFrame.TalentsTab
-        and ClassTalentFrame.TalentsTab.LoadoutDropDown
-        and ClassTalentFrame.TalentsTab.LoadoutDropDown.SetSelectionID
-        and ClassTalentFrame.TalentsTab.LoadoutDropDown:SetSelectionID(configID);
+    local dropdown = ClassTalentFrame and ClassTalentFrame.TalentsTab and ClassTalentFrame.TalentsTab.LoadoutDropDown;
+    local _ = dropdown and dropdown.SetSelectionID and dropdown:SetSelectionID(configID);
+
+    if true then return end -- disable this for now, needs more testing
     -- this seems to reduce the amount of tainted values, but I didn't really dig into it
-    local _ = ClassTalentFrame
-        and ClassTalentFrame.TalentsTab
-        and ClassTalentFrame.TalentsTab.LoadoutDropDown
-        and ClassTalentFrame.TalentsTab.LoadoutDropDown.DropDownControl
-        and secureSetNil(ClassTalentFrame.TalentsTab.LoadoutDropDown.DropDownControl, 'selectedValue');
+    local _ = dropdown and dropdown.DropDownControl and secureSetNil(dropdown.DropDownControl, 'selectedValue');
 end
 
 function TLB:TRAIT_CONFIG_UPDATED(configID)
