@@ -458,6 +458,7 @@ function TLB:UpdateLastSelectedSavedConfigID(configID)
     -- this horrible workaround should not be needed once blizzard actually fires SELECTED_LOADOUT_CHANGED event
     -- or you know.. realizes that it's possible for addons to change the loadout, but we can't do that without tainting all the things
     local talentsTab = self:GetTalentFrame();
+    if not talentsTab then return; end
     local dropdown = talentsTab.LoadoutDropDown or talentsTab.LoadSystem;
     local _ = dropdown and dropdown.SetSelectionID and dropdown:SetSelectionID(configID);
 
