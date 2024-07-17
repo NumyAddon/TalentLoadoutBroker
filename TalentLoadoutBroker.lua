@@ -437,6 +437,16 @@ function TLB:SelectLootSpec(specID)
     self:SetTextLootSpec(name, icon);
 end
 
+--- @return FRAME?
+function TLB:GetTalentFrame()
+    return (ClassTalentFrame and ClassTalentFrame.TalentsTab) or (PlayerSpellsFrame and PlayerSpellsFrame.TalentsFrame);
+end
+
+--- @return FRAME?
+function TLB:GetTalentFrameContainer()
+    return ClassTalentFrame or PlayerSpellsFrame;
+end
+
 local function secureSetNil(table, key)
     TextureLoadingGroupMixin.RemoveTexture({textures = table}, key);
 end
@@ -447,7 +457,8 @@ function TLB:UpdateLastSelectedSavedConfigID(configID)
 
     -- this horrible workaround should not be needed once blizzard actually fires SELECTED_LOADOUT_CHANGED event
     -- or you know.. realizes that it's possible for addons to change the loadout, but we can't do that without tainting all the things
-    local dropdown = ClassTalentFrame and ClassTalentFrame.TalentsTab and ClassTalentFrame.TalentsTab.LoadoutDropDown;
+    local talentsTab = self:GetTalentFrame();
+    local dropdown = talentsTab.LoadoutDropDown or talentsTab.LoadSystem;
     local _ = dropdown and dropdown.SetSelectionID and dropdown:SetSelectionID(configID);
 
     if true then return end -- disable this for now, needs more testing
@@ -472,9 +483,10 @@ function TLB:TRAIT_CONFIG_UPDATED(configID)
             self.updatePending, self.pendingDisableStarterBuild, self.pendingConfigID = false, false, nil;
 
             self:RefreshMenuListLoadouts();
-            if not InCombatLockdown() and ClassTalentFrame and ClassTalentFrame:IsShown() then
-                HideUIPanel(ClassTalentFrame);
-                ShowUIPanel(ClassTalentFrame);
+            local frame = self:GetTalentFrameContainer();
+            if not InCombatLockdown() and frame and frame:IsShown() then
+                HideUIPanel(frame);
+                ShowUIPanel(frame);
             end
         end);
 
@@ -503,9 +515,10 @@ function TLB:CONFIG_COMMIT_FAILED(configID)
             self:SetTextLoadout(configName);
             self:SetTextIsSwitching(false);
 
-            if not InCombatLockdown() and ClassTalentFrame and ClassTalentFrame:IsShown() then
-                HideUIPanel(ClassTalentFrame);
-                ShowUIPanel(ClassTalentFrame);
+            local frame = self:GetTalentFrameContainer();
+            if not InCombatLockdown() and frame and frame:IsShown() then
+                HideUIPanel(frame);
+                ShowUIPanel(frame);
             end
         end)
         self.updatePending, self.pendingDisableStarterBuild, self.pendingConfigID = false, false, nil;
