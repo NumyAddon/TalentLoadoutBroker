@@ -4,8 +4,6 @@ ns.TLB = {};
 --- @class TalentLoadoutBroker
 local TLB = ns.TLB;
 
---- @type LibUIDropDownMenuNumy
-local LibDD = LibStub('LibUIDropDownMenuNumy-4.0');
 local starterConfigID = Constants.TraitConsts.STARTER_BUILD_TRAIT_CONFIG_ID;
 
 function TLB:Init()
@@ -30,21 +28,6 @@ function TLB:Init()
         SlashCmdList['TALENT_LOADOUT_BROKER'] = function() ns.Config:OpenConfig(); end
     end);
 
-    self.dropDown = LibDD:Create_UIDropDownMenu(nil, UIParent);
-    self.dropDown:Hide();
-
-    self.menuListDefaults = {
-        loadout = {
-            { text = 'Loadouts', isTitle = true, notCheckable = true },
-        },
-        spec = {
-            { text = SPECIALIZATION, isTitle = true, notCheckable = true },
-        },
-        lootSpec = {
-            { text = SELECT_LOOT_SPECIALIZATION, isTitle = true, notCheckable = true },
-        },
-    };
-    self.menuList = Mixin({}, self.menuListDefaults);
     self.configIDs, self.configIDToName, self.currentConfigID = nil, nil, nil;
     self.updatePending, self.pendingDisableStarterBuild, self.pendingConfigID = false, false, nil;
     self.currentConfigID = nil;
@@ -62,23 +45,20 @@ function TLB:Init()
             end,
         }
     );
-    self:RefreshMenuListLoadouts();
+    self:RefreshText();
 
     self.eventFrame = CreateFrame('Frame');
     self.eventFrame:RegisterEvent('TRAIT_CONFIG_UPDATED');
     self.eventFrame:RegisterEvent('CONFIG_COMMIT_FAILED');
     self.eventFrame:RegisterEvent('ACTIVE_PLAYER_SPECIALIZATION_CHANGED');
     self.eventFrame:RegisterEvent('SPECIALIZATION_CHANGE_CAST_FAILED');
-    self.eventFrame:RegisterEvent('PLAYER_LOOT_SPEC_UPDATED');
     self.eventFrame:RegisterEvent('SPELLS_CHANGED');
-    self.eventFrame:SetScript('OnEvent', function(_, event, ...)
-        self[event](self, ...);
-    end)
+    self.eventFrame:SetScript('OnEvent', function(_, event, ...) self[event](self, ...); end);
     self.ignoreHook = false;
     hooksecurefunc(C_ClassTalents, 'UpdateLastSelectedSavedConfigID', function()
         if self.ignoreHook then return; end
-        self:RefreshMenuListLoadouts();
-    end)
+        self:RefreshText();
+    end);
 end
 
 function TLB:OnTooltipShow(tooltip)
@@ -92,7 +72,7 @@ end
 function TLB:OnButtonClick(brokerFrame, button)
     if button == 'LeftButton' then
         if IsShiftKeyDown() then
-            ToggleTalentFrame();
+            PlayerSpellsUtil.ToggleClassTalentOrSpecFrame();
         else
             self:ToggleLoadoutDropDown(brokerFrame);
         end
@@ -106,13 +86,75 @@ function TLB:OnButtonClick(brokerFrame, button)
 end
 
 function TLB:ToggleLoadoutDropDown(brokerFrame)
-    self:RefreshMenuListLoadouts();
-    LibDD:ToggleDropDownMenu(1, nil, self.dropDown, brokerFrame, 0, 0, self.menuList.loadout);
+    MenuUtil.CreateContextMenu(brokerFrame, function(owner, rootDescription)
+        self:GenerateLoadoutDropdown(rootDescription);
+    end);
 end
 
 function TLB:ToggleSpecDropDown(brokerFrame)
-    self:RefreshMenuListSpecs();
-    LibDD:ToggleDropDownMenu(1, nil, self.dropDown, brokerFrame, 0, 0, self.menuList.spec);
+    MenuUtil.CreateContextMenu(brokerFrame, function(owner, rootDescription)
+        self:GenerateSpecDropdown(rootDescription);
+    end);
+end
+
+function TLB:RefreshConfigMapping()
+    local specID = PlayerUtil.GetCurrentSpecID();
+    if not specID then return; end
+
+    self.currentConfigID =
+        C_ClassTalents.GetLastSelectedSavedConfigID(specID)
+        or (C_ClassTalents.GetStarterBuildActive() and starterConfigID);
+    self.configIDs = C_ClassTalents.GetConfigIDsBySpecID(specID);
+
+    self.configIDToName = {};
+    for _, configID in ipairs(self.configIDs) do
+        local configInfo = C_Traits.GetConfigInfo(configID);
+        self.configIDToName[configID] = (configInfo and configInfo.name) or '';
+    end
+
+    if not self.currentConfigID then
+        table.insert(self.configIDs, 0);
+        self.configIDToName[0] = LIGHTGRAY_FONT_COLOR:WrapTextInColorCode(TALENT_FRAME_DROP_DOWN_DEFAULT);
+    end
+
+    -- If spec has a starter build, add Starter Build as a dropdown option
+    if C_ClassTalents.GetHasStarterBuild() then
+        table.insert(self.configIDs, starterConfigID);
+        self.configIDToName[starterConfigID] = BLUE_FONT_COLOR:WrapTextInColorCode(TALENT_FRAME_DROP_DOWN_STARTER_BUILD);
+    end
+end
+
+function TLB:RefreshText()
+    if TalentLoadoutManagerAPI then
+        local API = TalentLoadoutManagerAPI;
+        local activeLoadoutID = API.CharacterAPI:GetActiveLoadoutID();
+
+        if C_ClassTalents.GetActiveConfigID() == activeLoadoutID then
+            self:SetTextLoadout(LIGHTGRAY_FONT_COLOR:WrapTextInColorCode(TALENT_FRAME_DROP_DOWN_DEFAULT));
+        elseif activeLoadoutID then
+            local loadoutInfo = API.GlobalAPI:GetLoadoutInfoByID(activeLoadoutID);
+            if loadoutInfo then
+                self:SetTextLoadout(loadoutInfo.displayName);
+            end
+        end
+    else
+        self:RefreshConfigMapping();
+        if not self.configIDs then return; end
+        local function isSelected(data)
+            local configID = data.configID;
+
+            return (not self.updatePending and configID == 0 and self.currentConfigID == nil)
+                or (self.updatePending and self.pendingConfigID == configID)
+                or (not self.updatePending and self.currentConfigID == configID);
+        end
+        for _, configID in ipairs(self.configIDs) do
+            local configName = self.configIDToName[configID];
+            if isSelected({ configID = configID }) then
+                self:SetTextLoadout(configName);
+                break;
+            end
+        end
+    end
 end
 
 function TLB:SetTextLoadout(loadoutName)
@@ -183,95 +225,81 @@ function TLB:FormatSpecText(name, icon)
     return string.format('|T%s:14:14:0:0:64:64:4:60:4:60|t  %s', icon, name );
 end
 
-function TLB:RefreshMenuListLoadouts()
+---@param rootDescription RootDescriptionProxy
+function TLB:GenerateLoadoutDropdown(rootDescription)
+    self:RefreshText();
+    if TalentLoadoutManagerAPI then
+        self:GenerateTLMLoadoutDropdown(rootDescription);
+    else
+        self:GenerateDefaultUILoadoutDropdown(rootDescription);
+    end
+end
+
+---@param rootDescription RootDescriptionProxy
+function TLB:GenerateDefaultUILoadoutDropdown(rootDescription)
     local specID = PlayerUtil.GetCurrentSpecID();
     if not specID then return; end
 
-    if not TalentLoadoutManagerAPI then
-        self.currentConfigID =
-            C_ClassTalents.GetLastSelectedSavedConfigID(specID)
-            or (C_ClassTalents.GetStarterBuildActive() and starterConfigID);
-        self.configIDs = C_ClassTalents.GetConfigIDsBySpecID(specID);
+    self:RefreshConfigMapping();
 
-        self.configIDToName = {};
-        for _, configID in ipairs(self.configIDs) do
-            local configInfo = C_Traits.GetConfigInfo(configID);
-            self.configIDToName[configID] = (configInfo and configInfo.name) or '';
-        end
+    rootDescription:CreateTitle('Loadouts');
 
-        if not self.currentConfigID then
-            table.insert(self.configIDs, 0);
-            self.configIDToName[0] = LIGHTGRAY_FONT_COLOR:WrapTextInColorCode(TALENT_FRAME_DROP_DOWN_DEFAULT);
-        end
+    local function onClick(data) self:SelectLoadout(data.configID, data.configName); end
+    local function isSelected(data)
+        local configID = data.configID;
 
-        -- If spec has a starter build, add Starter Build as a dropdown option
-        if C_ClassTalents.GetHasStarterBuild() then
-            table.insert(self.configIDs, starterConfigID);
-            self.configIDToName[starterConfigID] = BLUE_FONT_COLOR:WrapTextInColorCode(TALENT_FRAME_DROP_DOWN_STARTER_BUILD);
-        end
-
-        self.menuList.loadout = Mixin({}, self.menuListDefaults.loadout);
-        local function onClick(_, configID, configName) self:SelectLoadout(configID, configName);  end
-        for configID, configName in pairs(self.configIDToName) do
-            local checked =
-                (not self.updatePending and configID == 0 and self.currentConfigID == nil)
-                or (self.updatePending and self.pendingConfigID == configID)
-                or (not self.updatePending and self.currentConfigID == configID);
-            table.insert(self.menuList.loadout, {
-                text = configName,
-                arg1 = configID,
-                arg2 = configName,
-                func = onClick,
-                checked = checked,
-                notClickable = self.updatePending or checked,
-            });
-            if checked then self:SetTextLoadout(configName); end
-        end
-    else
-        local API = TalentLoadoutManagerAPI;
-
-        self.menuList.loadout = Mixin({}, self.menuListDefaults.loadout);
-        local function onClick(_, loadoutID) API.CharacterAPI:LoadLoadout(loadoutID, true); end
-        local activeLoadoutID = API.CharacterAPI:GetActiveLoadoutID();
-        if C_ClassTalents.GetActiveConfigID() == activeLoadoutID then
-            self:SetTextLoadout(LIGHTGRAY_FONT_COLOR:WrapTextInColorCode(TALENT_FRAME_DROP_DOWN_DEFAULT));
-        end
-        local loadouts = {};
-        for _, loadoutInfo in ipairs(API.GlobalAPI:GetLoadouts()) do
-            local checked = loadoutInfo.id == activeLoadoutID;
-            loadoutInfo.parentID = loadoutInfo.parentMapping and loadoutInfo.parentMapping[0];
-            table.insert(loadouts, {
-                text = loadoutInfo.parentID and ('  ||  '..loadoutInfo.displayName) or loadoutInfo.displayName,
-                id = loadoutInfo.id,
-                checked = checked,
-                data = loadoutInfo,
-                parentID = loadoutInfo.parentID,
-            });
-            if checked then self:SetTextLoadout(loadoutInfo.displayName); end
-        end
-        self:SortTLMLoadouts(loadouts);
-        for _, info in ipairs(loadouts) do
-            table.insert(self.menuList.loadout, {
-                text = info.text,
-                arg1 = info.id,
-                func = onClick,
-                checked = info.checked,
-                notClickable = self.updatePending or info.checked,
-            });
-        end
+        return (not self.updatePending and configID == 0 and self.currentConfigID == nil)
+            or (self.updatePending and self.pendingConfigID == configID)
+            or (not self.updatePending and self.currentConfigID == configID);
     end
-    LibDD:EasyMenu(self.menuList.loadout, self.dropDown, self.dropDown, 0, 0);
+
+    for _, configID in ipairs(self.configIDs) do
+        local configName = self.configIDToName[configID];
+        local data = { configID = configID, configName = configName };
+        rootDescription:CreateRadio(configName, isSelected, onClick, data);
+        if isSelected(data) then self:SetTextLoadout(configName); end
+    end
 end
 
+---@param rootDescription RootDescriptionProxy
+function TLB:GenerateTLMLoadoutDropdown(rootDescription)
+    local specID = PlayerUtil.GetCurrentSpecID();
+    if not specID then return; end
+
+    rootDescription:CreateTitle('Loadouts');
+
+    local API = TalentLoadoutManagerAPI;
+    local function onClick(data) API.CharacterAPI:LoadLoadout(data.loadoutID, true); end
+    local function isSelected(data) return API.CharacterAPI:GetActiveLoadoutID() == data.loadoutID; end
+
+    local loadouts = {};
+    for _, loadoutInfo in ipairs(API.GlobalAPI:GetLoadouts()) do
+        loadoutInfo.parentID = loadoutInfo.parentMapping and loadoutInfo.parentMapping[0];
+        table.insert(loadouts, {
+            text = loadoutInfo.parentID and ('  ||  '..loadoutInfo.displayName) or loadoutInfo.displayName,
+            loadoutID = loadoutInfo.id,
+            data = loadoutInfo,
+            parentID = loadoutInfo.parentID,
+        });
+    end
+    self:SortTLMLoadouts(loadouts);
+    for _, data in ipairs(loadouts) do
+        rootDescription:CreateRadio(data.text, isSelected, onClick, data);
+    end
+end
+
+--- @param loadouts TLB_TLMLoadout[]
 function TLB:SortTLMLoadouts(loadouts)
     --- order by:
     --- 1. playerIsOwner
     --- 2. isBlizzardLoadout
-    --- 3. name (todo: make this optional?)
-    --- 4. id (basically, the order they were created?)
+    --- 3. name
+    --- 4. id (basically, the order they were created)
     ---
     --- custom loadouts are listed underneath their parent, if any
 
+    --- @param a TLB_TLMLoadout
+    --- @param b TLB_TLMLoadout
     local function compare(a, b)
         if not b then
             return false;
@@ -289,9 +317,9 @@ function TLB:SortTLMLoadouts(loadouts)
             return false;
         end
 
-        if a.data.displayName < b.data.displayName then
+        if a.data.name < b.data.name then
             return true;
-        elseif a.data.displayName > b.data.displayName then
+        elseif a.data.name > b.data.name then
             return false;
         end
 
@@ -336,64 +364,53 @@ function TLB:SortTLMLoadouts(loadouts)
     end);
 end
 
-function TLB:RefreshMenuListSpecs()
+---@param rootDescription RootDescriptionProxy
+function TLB:GenerateSpecDropdown(rootDescription)
     local activeSpecIndex = GetSpecialization();
     if not activeSpecIndex then return; end
 
-    do --- spec selection
-        local function onClick(_, specIndex) self:SelectSpec(specIndex); end
-        local function isChecked(data) return activeSpecIndex == data.arg1; end
+    local numSpecs = GetNumSpecializationsForClassID(PlayerUtil.GetClassID());
 
-        local numSpecs = GetNumSpecializationsForClassID(PlayerUtil.GetClassID())
-        self.menuList.spec = Mixin({}, self.menuListDefaults.spec);
-        for i = 1, numSpecs do
-            local _, name, _, icon = GetSpecializationInfoForClassID(PlayerUtil.GetClassID(), i);
-            table.insert(self.menuList.spec, {
-                text = self:FormatSpecText(name, icon),
-                arg1 = i,
-                func = onClick,
-                checked = isChecked,
-                notClickable = i == activeSpecIndex,
-            });
-            if i == activeSpecIndex then self:SetTextSpec(name, icon); end
+    -- spec selection
+    do
+        rootDescription:CreateTitle(SPECIALIZATION);
+        local function isSelected(data) return activeSpecIndex == data; end
+        local function selectSpec(data) self:SelectSpec(data); end
+
+        for specIndex = 1, numSpecs do
+            local _, name, _, icon = GetSpecializationInfoForClassID(PlayerUtil.GetClassID(), specIndex);
+            rootDescription:CreateRadio(
+                self:FormatSpecText(name, icon),
+                isSelected,
+                selectSpec,
+                specIndex
+            );
         end
     end
-
-    do --- lootspec selection
-        local numSpecs = GetNumSpecializationsForClassID(PlayerUtil.GetClassID());
+    -- lootspec selection
+    rootDescription:CreateSpacer();
+    do
+        rootDescription:CreateTitle(SELECT_LOOT_SPECIALIZATION);
         local activeLootSpec = GetLootSpecialization();
-        for _, item in pairs(self.menuListDefaults.lootSpec) do
-            table.insert(self.menuList.spec, item);
-        end
+        local function isSelected(data) return activeLootSpec == data; end
+        local function selectSpec(data) self:SelectLootSpec(data); end
 
-        local function onClick(_, specId) TLB:SelectLootSpec(specId); end
-        local function isChecked(data) return activeLootSpec == data.arg1; end
-        table.insert(self.menuList.spec, {
-            text = string.format(LOOT_SPECIALIZATION_DEFAULT, select(2, GetSpecializationInfo(GetSpecialization()))),
-            arg1 = 0,
-            func = onClick,
-            checked = isChecked,
-            notClickable = activeLootSpec == 0,
-        });
-        for i = 1, numSpecs do
-            local specId, name, _, icon = GetSpecializationInfoForClassID(PlayerUtil.GetClassID(), i);
-            table.insert(self.menuList.spec, {
-                text = self:FormatSpecText(name, icon),
-                arg1 = specId,
-                func = onClick,
-                checked = isChecked,
-                notClickable = activeLootSpec == specId,
-            });
-            if
-                specId == activeLootSpec
-                or (activeLootSpec == 0 and i == activeSpecIndex)
-            then
-                self:SetTextLootSpec(name, icon);
-            end
+        rootDescription:CreateRadio(
+            string.format(LOOT_SPECIALIZATION_DEFAULT, select(2, GetSpecializationInfo(GetSpecialization()))),
+            isSelected,
+            selectSpec,
+            0
+        );
+        for specIndex = 1, numSpecs do
+            local specId, name, _, icon = GetSpecializationInfoForClassID(PlayerUtil.GetClassID(), specIndex);
+            rootDescription:CreateRadio(
+                self:FormatSpecText(name, icon),
+                isSelected,
+                selectSpec,
+                specId
+            );
         end
     end
-
-    LibDD:EasyMenu(self.menuList.spec, self.dropDown, self.dropDown, 0, 0);
 end
 
 function TLB:SelectLoadout(configID, configName)
@@ -433,23 +450,19 @@ function TLB:SelectLootSpec(specID)
     if GetLootSpecialization() == specID then return; end
     SetLootSpecialization(specID);
     local _, name, _, icon = GetSpecializationInfoByID(specID);
-    --self:RefreshMenuListSpecs();
     self:SetTextLootSpec(name, icon);
 end
 
---- @return FRAME?
+--- @return PlayerSpellsFrame_TalentsFrame?
 function TLB:GetTalentFrame()
-    return (ClassTalentFrame and ClassTalentFrame.TalentsTab) or (PlayerSpellsFrame and PlayerSpellsFrame.TalentsFrame);
+    return PlayerSpellsFrame and PlayerSpellsFrame.TalentsFrame;
 end
 
---- @return FRAME?
+--- @return PlayerSpellsFrame?
 function TLB:GetTalentFrameContainer()
-    return ClassTalentFrame or PlayerSpellsFrame;
+    return PlayerSpellsFrame;
 end
 
-local function secureSetNil(table, key)
-    TextureLoadingGroupMixin.RemoveTexture({textures = table}, key);
-end
 function TLB:UpdateLastSelectedSavedConfigID(configID)
     self.ignoreHook = true;
     C_ClassTalents.UpdateLastSelectedSavedConfigID(PlayerUtil.GetCurrentSpecID(), configID);
@@ -459,12 +472,8 @@ function TLB:UpdateLastSelectedSavedConfigID(configID)
     -- or you know.. realizes that it's possible for addons to change the loadout, but we can't do that without tainting all the things
     local talentsTab = self:GetTalentFrame();
     if not talentsTab then return; end
-    local dropdown = talentsTab.LoadoutDropDown or talentsTab.LoadSystem;
+    local dropdown = talentsTab.LoadSystem;
     local _ = dropdown and dropdown.SetSelectionID and dropdown:SetSelectionID(configID);
-
-    if true then return end -- disable this for now, needs more testing
-    -- this seems to reduce the amount of tainted values, but I didn't really dig into it
-    local _ = dropdown and dropdown.DropDownControl and secureSetNil(dropdown.DropDownControl, 'selectedValue');
 end
 
 function TLB:TRAIT_CONFIG_UPDATED(configID)
@@ -473,7 +482,7 @@ function TLB:TRAIT_CONFIG_UPDATED(configID)
         local pendingConfigID = self.pendingConfigID;
         local configName = self.configIDToName[pendingConfigID] or 'Unknown';
         local pendingDisableStarterBuild = self.pendingDisableStarterBuild;
-        C_Timer.After(0, function()
+        RunNextFrame(function()
             self.updatePending = false;
             if pendingDisableStarterBuild then
                 C_ClassTalents.SetStarterBuildActive(false);
@@ -483,7 +492,7 @@ function TLB:TRAIT_CONFIG_UPDATED(configID)
             self:SetTextIsSwitching(false);
             self.updatePending, self.pendingDisableStarterBuild, self.pendingConfigID = false, false, nil;
 
-            self:RefreshMenuListLoadouts();
+            self:RefreshText();
             local frame = self:GetTalentFrameContainer();
             if not InCombatLockdown() and frame and frame:IsShown() then
                 HideUIPanel(frame);
@@ -493,17 +502,17 @@ function TLB:TRAIT_CONFIG_UPDATED(configID)
 
         return;
     end
-    C_Timer.After(0, function()
-        self:RefreshMenuListLoadouts();
-    end)
+    RunNextFrame(function()
+        self:RefreshText();
+    end);
 end
 
 function TLB:CONFIG_COMMIT_FAILED(configID)
     if configID ~= C_ClassTalents.GetActiveConfigID() then return; end
     if self.updatePending then
         local currentConfigID = self.currentConfigID;
-        local configName = self.configIDToName[currentConfigID] or 'Unknown'
-        C_Timer.After(0, function() -- next frame, because the default UI will overwrite anything we do here -.-
+        local configName = self.configIDToName[currentConfigID] or 'Unknown';
+        RunNextFrame(function() -- next frame, because the default UI will overwrite anything we do here -.-
             self.updatePending = false;
             C_Traits.RollbackConfig(C_ClassTalents.GetActiveConfigID());
             if currentConfigID == starterConfigID then
@@ -521,24 +530,23 @@ function TLB:CONFIG_COMMIT_FAILED(configID)
                 HideUIPanel(frame);
                 ShowUIPanel(frame);
             end
-        end)
+        end);
         self.updatePending, self.pendingDisableStarterBuild, self.pendingConfigID = false, false, nil;
     end
 end
 
 function TLB:SPELLS_CHANGED()
-    self:RefreshMenuListLoadouts();
-    self:RefreshMenuListSpecs();
+    self:RefreshText();
 
     EventUtil.ContinueOnAddOnLoaded('TalentLoadoutManager', function()
         if not TalentLoadoutManagerAPI then return; end
         RunNextFrame(function()
-            self:RefreshMenuListLoadouts();
+            self:RefreshText();
         end);
 
         local API = TalentLoadoutManagerAPI;
-        API:RegisterCallback(API.Event.LoadoutListUpdated, self.RefreshMenuListLoadouts, self);
-        API:RegisterCallback(API.Event.CustomLoadoutApplied, self.RefreshMenuListLoadouts, self);
+        API:RegisterCallback(API.Event.LoadoutListUpdated, self.RefreshText, self);
+        API:RegisterCallback(API.Event.CustomLoadoutApplied, self.RefreshText, self);
     end);
 
     self.eventFrame:UnregisterEvent('SPELLS_CHANGED');
@@ -546,17 +554,11 @@ end
 
 function TLB:ACTIVE_PLAYER_SPECIALIZATION_CHANGED()
     self:SetTextIsSwitching(false);
-    self:RefreshMenuListLoadouts();
-    self:RefreshMenuListSpecs();
+    self:RefreshText();
 end
 
 function TLB:SPECIALIZATION_CHANGE_CAST_FAILED()
     self:SetTextIsSwitching(false);
-    self:RefreshMenuListSpecs();
-end
-
-function TLB:PLAYER_LOOT_SPEC_UPDATED()
-    self:RefreshMenuListSpecs();
 end
 
 do TLB:Init(); end

@@ -2,7 +2,6 @@
 	<script file="LibStub\LibStub.lua"/>
 	<Include file="CallbackHandler-1.0\CallbackHandler-1.0.xml"/>
 	<Include file="LibDataBroker-1.1\LibDataBroker-1.1.lua"/>
-	<Include file="LibUIDropDownMenu\LibUIDropDownMenu.xml"/>
 	<Include file="AceGUI-3.0\AceGUI-3.0.xml"/>
 	<Include file="AceConfig-3.0\AceConfig-3.0.xml"/>
 </Ui>
