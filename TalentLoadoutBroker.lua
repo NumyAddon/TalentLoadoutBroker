@@ -45,19 +45,20 @@ function TLB:Init()
             end,
         }
     );
-    self:RefreshText();
+    self:RefreshLoadoutText();
 
     self.eventFrame = CreateFrame('Frame');
     self.eventFrame:RegisterEvent('TRAIT_CONFIG_UPDATED');
     self.eventFrame:RegisterEvent('CONFIG_COMMIT_FAILED');
     self.eventFrame:RegisterEvent('ACTIVE_PLAYER_SPECIALIZATION_CHANGED');
     self.eventFrame:RegisterEvent('SPECIALIZATION_CHANGE_CAST_FAILED');
+    self.eventFrame:RegisterEvent('PLAYER_LOOT_SPEC_UPDATED');
     self.eventFrame:RegisterEvent('SPELLS_CHANGED');
     self.eventFrame:SetScript('OnEvent', function(_, event, ...) self[event](self, ...); end);
     self.ignoreHook = false;
     hooksecurefunc(C_ClassTalents, 'UpdateLastSelectedSavedConfigID', function()
         if self.ignoreHook then return; end
-        self:RefreshText();
+        self:RefreshLoadoutText();
     end);
 end
 
@@ -124,7 +125,7 @@ function TLB:RefreshConfigMapping()
     end
 end
 
-function TLB:RefreshText()
+function TLB:RefreshLoadoutText()
     if TalentLoadoutManagerAPI then
         local API = TalentLoadoutManagerAPI;
         local activeLoadoutID = API.CharacterAPI:GetActiveLoadoutID();
@@ -155,6 +156,18 @@ function TLB:RefreshText()
             end
         end
     end
+end
+
+function TLB:RefreshSpecText()
+    local activeSpecIndex = GetSpecialization();
+    if not activeSpecIndex then return; end
+
+    local specID, name, _, icon = GetSpecializationInfoForClassID(PlayerUtil.GetClassID(), activeSpecIndex);
+    self:SetTextSpec(name, icon);
+
+    local activeLootSpec = GetLootSpecialization();
+    local _, lootSpecName, _, lootSpecIcon = GetSpecializationInfoByID(activeLootSpec == 0 and specID or activeLootSpec);
+    self:SetTextLootSpec(lootSpecName, lootSpecIcon);
 end
 
 function TLB:SetTextLoadout(loadoutName)
@@ -227,7 +240,7 @@ end
 
 ---@param rootDescription RootDescriptionProxy
 function TLB:GenerateLoadoutDropdown(rootDescription)
-    self:RefreshText();
+    self:RefreshLoadoutText();
     if TalentLoadoutManagerAPI then
         self:GenerateTLMLoadoutDropdown(rootDescription);
     else
@@ -369,6 +382,8 @@ function TLB:GenerateSpecDropdown(rootDescription)
     local activeSpecIndex = GetSpecialization();
     if not activeSpecIndex then return; end
 
+    self:RefreshSpecText();
+
     local numSpecs = GetNumSpecializationsForClassID(PlayerUtil.GetClassID());
 
     -- spec selection
@@ -492,7 +507,7 @@ function TLB:TRAIT_CONFIG_UPDATED(configID)
             self:SetTextIsSwitching(false);
             self.updatePending, self.pendingDisableStarterBuild, self.pendingConfigID = false, false, nil;
 
-            self:RefreshText();
+            self:RefreshLoadoutText();
             local frame = self:GetTalentFrameContainer();
             if not InCombatLockdown() and frame and frame:IsShown() then
                 HideUIPanel(frame);
@@ -503,7 +518,7 @@ function TLB:TRAIT_CONFIG_UPDATED(configID)
         return;
     end
     RunNextFrame(function()
-        self:RefreshText();
+        self:RefreshLoadoutText();
     end);
 end
 
@@ -536,17 +551,18 @@ function TLB:CONFIG_COMMIT_FAILED(configID)
 end
 
 function TLB:SPELLS_CHANGED()
-    self:RefreshText();
+    self:RefreshLoadoutText();
+    self:RefreshSpecText();
 
     EventUtil.ContinueOnAddOnLoaded('TalentLoadoutManager', function()
         if not TalentLoadoutManagerAPI then return; end
         RunNextFrame(function()
-            self:RefreshText();
+            self:RefreshLoadoutText();
         end);
 
         local API = TalentLoadoutManagerAPI;
-        API:RegisterCallback(API.Event.LoadoutListUpdated, self.RefreshText, self);
-        API:RegisterCallback(API.Event.CustomLoadoutApplied, self.RefreshText, self);
+        API:RegisterCallback(API.Event.LoadoutListUpdated, self.RefreshLoadoutText, self);
+        API:RegisterCallback(API.Event.CustomLoadoutApplied, self.RefreshLoadoutText, self);
     end);
 
     self.eventFrame:UnregisterEvent('SPELLS_CHANGED');
@@ -554,11 +570,17 @@ end
 
 function TLB:ACTIVE_PLAYER_SPECIALIZATION_CHANGED()
     self:SetTextIsSwitching(false);
-    self:RefreshText();
+    self:RefreshLoadoutText();
+    self:RefreshSpecText();
 end
 
 function TLB:SPECIALIZATION_CHANGE_CAST_FAILED()
     self:SetTextIsSwitching(false);
+    self:RefreshSpecText();
+end
+
+function TLB:PLAYER_LOOT_SPEC_UPDATED()
+    self:RefreshSpecText();
 end
 
 do TLB:Init(); end
