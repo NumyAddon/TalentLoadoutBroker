@@ -4,3 +4,4 @@ externals:
     libs/LibDataBroker-1.1: https://github.com/tekkub/libdatabroker-1-1
     Libs/AceGUI-3.0: https://repos.wowace.com/wow/ace3/trunk/AceGUI-3.0
     libs/AceConfig-3.0: https://repos.wowace.com/wow/ace3/trunk/AceConfig-3.0
+    libs/LibVersionCheck-1.0: https://github.com/NumyAddon/LibVersionCheck-1.0.git
