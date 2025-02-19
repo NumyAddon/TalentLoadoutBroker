@@ -6,6 +6,7 @@
 ## IconTexture: Interface\Addons\TalentLoadoutBroker\media\icon
 ## SavedVariables: TalentLoadoutBrokerDB
 ## X-Curse-Project-ID: 694013
+## X-Wago-ID: x61zExK1
 ## Category-enUS: Combat
 ## Category-deDE: Kampf
 ## Category-esES: Combate
