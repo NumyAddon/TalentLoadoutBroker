@@ -455,7 +455,7 @@ end
 
 function TLB:SelectSpec(specIndex)
     if GetSpecialization() == specIndex then return; end
-    SetSpecialization(specIndex);
+    C_SpecializationInfo.SetSpecialization(specIndex);
     local _, name, _, icon = GetSpecializationInfoForClassID(PlayerUtil.GetClassID(), specIndex);
     self:SetTextSpec(name, icon);
     self:SetTextIsSwitching(true);
