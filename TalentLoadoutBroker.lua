@@ -5,6 +5,8 @@ ns.TLB = {};
 local TLB = ns.TLB;
 
 local starterConfigID = Constants.TraitConsts.STARTER_BUILD_TRAIT_CONFIG_ID;
+local isDruid = select(2, UnitClass('player')) == 'DRUID';
+local cancelFormButton = CreateFrame('Button', nil, UIParent, 'InsecureActionButtonTemplate');
 
 function TLB:Init()
     EventUtil.ContinueOnAddOnLoaded(addonName, function()
@@ -26,6 +28,19 @@ function TLB:Init()
         SLASH_TALENT_LOADOUT_BROKER1 = '/tlb';
         SLASH_TALENT_LOADOUT_BROKER2 = '/talentloadoutbroker';
         SlashCmdList['TALENT_LOADOUT_BROKER'] = function() ns.Config:OpenConfig(); end
+    end);
+
+    cancelFormButton:SetAttribute('type', 'macro');
+    cancelFormButton:SetAttribute('macrotext', '/cancelform [form:3]');
+    cancelFormButton:SetAttribute('useOnKeyDown', true);
+    cancelFormButton:RegisterForClicks('AnyDown')
+    cancelFormButton:SetFrameStrata('FULLSCREEN_DIALOG');
+    cancelFormButton:SetFrameLevel(9999);
+    cancelFormButton:SetPropagateMouseMotion(true);
+    cancelFormButton:HookScript('OnClick', function(self)
+        self.elementDescription:Pick(MenuInputContext.MouseButton, 'LeftButton');
+        self:ClearAllPoints();
+        self:Hide();
     end);
 
     self.configIDs, self.configIDToName, self.currentConfigID = nil, nil, nil;
@@ -238,7 +253,7 @@ function TLB:FormatSpecText(name, icon)
     return string.format('|T%s:14:14:0:0:64:64:4:60:4:60|t  %s', icon, name );
 end
 
----@param rootDescription RootDescriptionProxy
+---@param rootDescription RootMenuDescriptionProxy
 function TLB:GenerateLoadoutDropdown(rootDescription)
     self:RefreshLoadoutText();
     if TalentLoadoutManagerAPI then
@@ -248,7 +263,7 @@ function TLB:GenerateLoadoutDropdown(rootDescription)
     end
 end
 
----@param rootDescription RootDescriptionProxy
+---@param rootDescription RootMenuDescriptionProxy
 function TLB:GenerateDefaultUILoadoutDropdown(rootDescription)
     local specID = PlayerUtil.GetCurrentSpecID();
     if not specID then return; end
@@ -274,7 +289,7 @@ function TLB:GenerateDefaultUILoadoutDropdown(rootDescription)
     end
 end
 
----@param rootDescription RootDescriptionProxy
+---@param rootDescription RootMenuDescriptionProxy
 function TLB:GenerateTLMLoadoutDropdown(rootDescription)
     local specID = PlayerUtil.GetCurrentSpecID();
     if not specID then return; end
@@ -377,14 +392,14 @@ function TLB:SortTLMLoadouts(loadouts)
     end);
 end
 
----@param rootDescription RootDescriptionProxy
+---@param rootDescription RootMenuDescriptionProxy
 function TLB:GenerateSpecDropdown(rootDescription)
     local activeSpecIndex = GetSpecialization();
     if not activeSpecIndex then return; end
 
     self:RefreshSpecText();
 
-    local numSpecs = GetNumSpecializationsForClassID(PlayerUtil.GetClassID());
+    local numSpecs = C_SpecializationInfo.GetNumSpecializationsForClassID(PlayerUtil.GetClassID());
 
     -- spec selection
     do
@@ -394,12 +409,30 @@ function TLB:GenerateSpecDropdown(rootDescription)
 
         for specIndex = 1, numSpecs do
             local _, name, _, icon = GetSpecializationInfoForClassID(PlayerUtil.GetClassID(), specIndex);
-            rootDescription:CreateRadio(
+            local button = rootDescription:CreateRadio(
                 self:FormatSpecText(name, icon),
                 isSelected,
                 selectSpec,
                 specIndex
             );
+            if isDruid then
+                button:HookOnEnter(function(frame, elementDescription)
+                    cancelFormButton:ClearAllPoints();
+                    cancelFormButton:SetAllPoints(frame);
+                    cancelFormButton:Show();
+                    cancelFormButton.elementDescription = elementDescription;
+                    if GetShapeshiftForm() == 3 then
+                        GameTooltip:SetOwner(frame, 'ANCHOR_TOP');
+                        GameTooltip:SetText('This will cancel your travel form!');
+                        GameTooltip:Show();
+                    end
+                end);
+                button:HookOnLeave(function()
+                    cancelFormButton:ClearAllPoints();
+                    cancelFormButton:Hide();
+                    GameTooltip:Hide();
+                end);
+            end
         end
     end
     -- lootspec selection
