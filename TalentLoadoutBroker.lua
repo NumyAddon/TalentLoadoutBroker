@@ -6,7 +6,6 @@ local TLB = ns.TLB;
 
 local starterConfigID = Constants.TraitConsts.STARTER_BUILD_TRAIT_CONFIG_ID;
 local isDruid = select(2, UnitClass('player')) == 'DRUID';
-local cancelFormButton = CreateFrame('Button', nil, UIParent, 'InsecureActionButtonTemplate');
 
 function TLB:Init()
     EventUtil.ContinueOnAddOnLoaded(addonName, function()
@@ -28,19 +27,6 @@ function TLB:Init()
         SLASH_TALENT_LOADOUT_BROKER1 = '/tlb';
         SLASH_TALENT_LOADOUT_BROKER2 = '/talentloadoutbroker';
         SlashCmdList['TALENT_LOADOUT_BROKER'] = function() ns.Config:OpenConfig(); end
-    end);
-
-    cancelFormButton:SetAttribute('type', 'macro');
-    cancelFormButton:SetAttribute('macrotext', '/cancelform [form:3]');
-    cancelFormButton:SetAttribute('useOnKeyDown', true);
-    cancelFormButton:RegisterForClicks('AnyDown')
-    cancelFormButton:SetFrameStrata('FULLSCREEN_DIALOG');
-    cancelFormButton:SetFrameLevel(9999);
-    cancelFormButton:SetPropagateMouseMotion(true);
-    cancelFormButton:HookScript('OnClick', function(self)
-        self.elementDescription:Pick(MenuInputContext.MouseButton, 'LeftButton');
-        self:ClearAllPoints();
-        self:Hide();
     end);
 
     self.configIDs, self.configIDToName, self.currentConfigID = nil, nil, nil;
@@ -405,7 +391,12 @@ function TLB:GenerateSpecDropdown(rootDescription)
     do
         rootDescription:CreateTitle(SPECIALIZATION);
         local function isSelected(data) return activeSpecIndex == data; end
-        local function selectSpec(data) self:SelectSpec(data); end
+        local function selectSpec(data)
+            if isDruid and GetShapeshiftForm() == 3 then
+                CancelShapeshiftForm();
+            end
+            self:SelectSpec(data);
+        end
 
         for specIndex = 1, numSpecs do
             local _, name, _, icon = GetSpecializationInfoForClassID(PlayerUtil.GetClassID(), specIndex);
@@ -416,11 +407,7 @@ function TLB:GenerateSpecDropdown(rootDescription)
                 specIndex
             );
             if isDruid then
-                button:HookOnEnter(function(frame, elementDescription)
-                    cancelFormButton:ClearAllPoints();
-                    cancelFormButton:SetAllPoints(frame);
-                    cancelFormButton:Show();
-                    cancelFormButton.elementDescription = elementDescription;
+                button:HookOnEnter(function(frame)
                     if GetShapeshiftForm() == 3 then
                         GameTooltip:SetOwner(frame, 'ANCHOR_TOP');
                         GameTooltip:SetText('This will cancel your travel form!');
@@ -428,8 +415,6 @@ function TLB:GenerateSpecDropdown(rootDescription)
                     end
                 end);
                 button:HookOnLeave(function()
-                    cancelFormButton:ClearAllPoints();
-                    cancelFormButton:Hide();
                     GameTooltip:Hide();
                 end);
             end
