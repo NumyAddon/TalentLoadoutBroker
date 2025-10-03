@@ -160,7 +160,7 @@ function TLB:RefreshLoadoutText()
 end
 
 function TLB:RefreshSpecText()
-    local activeSpecIndex = GetSpecialization();
+    local activeSpecIndex = C_SpecializationInfo.GetSpecialization();
     if not activeSpecIndex then return; end
 
     local specID, name, _, icon = GetSpecializationInfoForClassID(PlayerUtil.GetClassID(), activeSpecIndex);
@@ -380,7 +380,7 @@ end
 
 ---@param rootDescription RootMenuDescriptionProxy
 function TLB:GenerateSpecDropdown(rootDescription)
-    local activeSpecIndex = GetSpecialization();
+    local activeSpecIndex = C_SpecializationInfo.GetSpecialization();
     if not activeSpecIndex then return; end
 
     self:RefreshSpecText();
@@ -429,7 +429,7 @@ function TLB:GenerateSpecDropdown(rootDescription)
         local function selectSpec(data) self:SelectLootSpec(data); end
 
         rootDescription:CreateRadio(
-            string.format(LOOT_SPECIALIZATION_DEFAULT, select(2, GetSpecializationInfo(GetSpecialization()))),
+            string.format(LOOT_SPECIALIZATION_DEFAULT, select(2, C_SpecializationInfo.GetSpecializationInfo(C_SpecializationInfo.GetSpecialization()))),
             isSelected,
             selectSpec,
             0
@@ -472,7 +472,7 @@ function TLB:SelectLoadout(configID, configName)
 end
 
 function TLB:SelectSpec(specIndex)
-    if GetSpecialization() == specIndex then return; end
+    if C_SpecializationInfo.GetSpecialization() == specIndex then return; end
     C_SpecializationInfo.SetSpecialization(specIndex);
     local _, name, _, icon = GetSpecializationInfoForClassID(PlayerUtil.GetClassID(), specIndex);
     self:SetTextSpec(name, icon);
