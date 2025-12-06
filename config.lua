@@ -62,7 +62,8 @@ end
 
 function Config:Initialize()
     self:RegisterOptions();
-    LibStub("AceConfigDialog-3.0"):AddToBlizOptions(addonName, addonName);
+    local _, categoryID = LibStub("AceConfigDialog-3.0"):AddToBlizOptions(addonName, addonName);
+    self.categoryID = categoryID;
 end
 
 function Config:RegisterOptions()
@@ -70,7 +71,7 @@ function Config:RegisterOptions()
 end
 
 function Config:OpenConfig()
-    Settings.OpenToCategory(addonName);
+    Settings.OpenToCategory(self.categoryID);
 end
 
 function Config:GetConfig(property)
