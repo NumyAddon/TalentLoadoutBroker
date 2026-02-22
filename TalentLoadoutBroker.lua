@@ -7,27 +7,29 @@ local TLB = ns.TLB;
 local starterConfigID = Constants.TraitConsts.STARTER_BUILD_TRAIT_CONFIG_ID;
 local isDruid = select(2, UnitClass('player')) == 'DRUID';
 
-function TLB:Init()
-    EventUtil.ContinueOnAddOnLoaded(addonName, function()
-        TalentLoadoutBrokerDB = TalentLoadoutBrokerDB or {};
-        self.db = TalentLoadoutBrokerDB;
-        self.defaults = {
-            textFormat = '%switching%%specIcon%%specName%||%loadoutName%',
-        };
-        for k, v in pairs(self.defaults) do
-            if self.db[k] == nil then
-                self.db[k] = v;
-            end
-        end
-        if self.db.textFormat == '%switching%%specIcon%%specName%|%loadoutName%' then
-            self.db.textFormat = self.defaults.textFormat;
-        end
+EventUtil.ContinueOnAddOnLoaded(addonName, function()
+    TLB:Init();
+end);
 
-        ns.Config:Initialize();
-        SLASH_TALENT_LOADOUT_BROKER1 = '/tlb';
-        SLASH_TALENT_LOADOUT_BROKER2 = '/talentloadoutbroker';
-        SlashCmdList['TALENT_LOADOUT_BROKER'] = function() ns.Config:OpenConfig(); end
-    end);
+function TLB:Init()
+    TalentLoadoutBrokerDB = TalentLoadoutBrokerDB or {};
+    self.db = TalentLoadoutBrokerDB;
+    self.defaults = {
+        textFormat = '%switching%%specIcon%%specName%||%loadoutName%',
+    };
+    for k, v in pairs(self.defaults) do
+        if self.db[k] == nil then
+            self.db[k] = v;
+        end
+    end
+    if self.db.textFormat == '%switching%%specIcon%%specName%|%loadoutName%' then
+        self.db.textFormat = self.defaults.textFormat;
+    end
+
+    ns.Config:Initialize();
+    SLASH_TALENT_LOADOUT_BROKER1 = '/tlb';
+    SLASH_TALENT_LOADOUT_BROKER2 = '/talentloadoutbroker';
+    SlashCmdList['TALENT_LOADOUT_BROKER'] = function() ns.Config:OpenConfig(); end
 
     self.configIDs, self.configIDToName, self.currentConfigID = nil, nil, nil;
     self.updatePending, self.pendingDisableStarterBuild, self.pendingConfigID = false, false, nil;
@@ -600,5 +602,3 @@ end
 function TLB:PLAYER_LOOT_SPEC_UPDATED()
     self:RefreshSpecText();
 end
-
-do TLB:Init(); end
