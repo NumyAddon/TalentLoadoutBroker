@@ -24,4 +24,5 @@
 
 libs\load_libs.xml
 TalentLoadoutBroker.lua
+TalentLoadoutBrokerV2.lua
 config.lua

@@ -1,13 +1,14 @@
-if C_ClassTalents.SwitchToLoadoutByIndex then return end -- @todo: delete file in 12.0.5
+if not C_ClassTalents.SwitchToLoadoutByIndex then return end -- @todo delete the check in 12.0.5, and delete the old file
 
 local addonName, ns = ...;
 ns.TLB = {};
 
---- @class TalentLoadoutBroker
+--- @class TalentLoadoutBrokerV2
 local TLB = ns.TLB;
 
 local starterConfigID = Constants.TraitConsts.STARTER_BUILD_TRAIT_CONFIG_ID;
 local isDruid = select(2, UnitClass('player')) == 'DRUID';
+local LOADOUT_CAST_SPELL_ID = 384255;
 
 EventUtil.ContinueOnAddOnLoaded(addonName, function()
     TLB:Init();
@@ -54,7 +55,6 @@ function TLB:Init()
 
     self.eventFrame = CreateFrame('Frame');
     self.eventFrame:RegisterEvent('TRAIT_CONFIG_UPDATED');
-    self.eventFrame:RegisterEvent('CONFIG_COMMIT_FAILED');
     self.eventFrame:RegisterEvent('ACTIVE_PLAYER_SPECIALIZATION_CHANGED');
     self.eventFrame:RegisterEvent('SPECIALIZATION_CHANGE_CAST_FAILED');
     self.eventFrame:RegisterEvent('PLAYER_LOOT_SPEC_UPDATED');
@@ -62,7 +62,6 @@ function TLB:Init()
     self.eventFrame:SetScript('OnEvent', function(_, event, ...) self[event](self, ...); end);
     self.ignoreHook = false;
     hooksecurefunc(C_ClassTalents, 'UpdateLastSelectedSavedConfigID', function()
-        if self.ignoreHook then return; end
         self:RefreshLoadoutText();
     end);
 end
@@ -121,12 +120,6 @@ function TLB:RefreshConfigMapping()
     if not self.currentConfigID then
         table.insert(self.configIDs, 0);
         self.configIDToName[0] = LIGHTGRAY_FONT_COLOR:WrapTextInColorCode(TALENT_FRAME_DROP_DOWN_DEFAULT);
-    end
-
-    -- If spec has a starter build, add Starter Build as a dropdown option
-    if C_ClassTalents.GetHasStarterBuild() then
-        table.insert(self.configIDs, starterConfigID);
-        self.configIDToName[starterConfigID] = BLUE_FONT_COLOR:WrapTextInColorCode(TALENT_FRAME_DROP_DOWN_STARTER_BUILD);
     end
 end
 
@@ -240,7 +233,7 @@ function TLB:SetText(loadoutName, specName, specIcon, isSwitching, lootSpecName,
 end
 
 function TLB:FormatSpecText(name, icon)
-    return string.format('|T%s:14:14:0:0:64:64:4:60:4:60|t  %s', icon, name );
+    return string.format('|T%s:14:14:0:0:64:64:4:60:4:60|t  %s', icon, name);
 end
 
 ---@param rootDescription RootMenuDescriptionProxy
@@ -294,7 +287,7 @@ function TLB:GenerateTLMLoadoutDropdown(rootDescription)
     for _, loadoutInfo in ipairs(API.GlobalAPI:GetLoadouts()) do
         loadoutInfo.parentID = loadoutInfo.parentMapping and loadoutInfo.parentMapping[0];
         table.insert(loadouts, {
-            text = loadoutInfo.parentID and ('  ||  '..loadoutInfo.displayName) or loadoutInfo.displayName,
+            text = loadoutInfo.parentID and ('  ||  ' .. loadoutInfo.displayName) or loadoutInfo.displayName,
             loadoutID = loadoutInfo.id,
             data = loadoutInfo,
             parentID = loadoutInfo.parentID,
@@ -450,29 +443,36 @@ function TLB:GenerateSpecDropdown(rootDescription)
     end
 end
 
-function TLB:SelectLoadout(configID, configName)
-    local loadResult;
-    if configID == self.currentConfigID then
-        return;
-    elseif configID == starterConfigID then
-        loadResult = C_ClassTalents.SetStarterBuildActive(true);
-    else
-        loadResult = C_ClassTalents.LoadConfig(configID, true);
+function TLB:GetLoadoutIndexByConfigID(configID)
+    local configIDs = C_ClassTalents.GetConfigIDsBySpecID()
+    for index, id in ipairs(configIDs) do
+        if id == configID then
+            return index;
+        end
     end
-    if loadResult ~= Enum.LoadConfigResult.Error then
-        self:SetTextLoadout(configName);
-    end
-    if loadResult == Enum.LoadConfigResult.NoChangesNecessary then
-        if self.currentConfigID == starterConfigID then C_ClassTalents.SetStarterBuildActive(false); end
-        self.updatePending = false;
-        self.pendingConfigID = nil;
-        self:UpdateLastSelectedSavedConfigID(configID);
-    elseif loadResult == Enum.LoadConfigResult.LoadInProgress then
-        if self.currentConfigID == starterConfigID then self.pendingDisableStarterBuild = true; end
-        self.updatePending = true;
-        self.pendingConfigID = configID;
-        self:SetTextIsSwitching(true);
-    end
+
+    return nil;
+end
+
+function TLB:SelectLoadout(configID)
+    self.updatePending = true;
+    self.pendingConfigID = configID;
+    self:SetTextIsSwitching(true);
+
+    self.eventFrame:RegisterEvent('CONFIG_COMMIT_FAILED');
+
+    C_ClassTalents.SwitchToLoadoutByIndex(self:GetLoadoutIndexByConfigID(configID));
+
+    -- in case something goes wrong, we don't want to be stuck in "switching" state forever
+    self.timer = C_Timer.NewTimer(2, function()
+        if not self.updatePending then return; end
+        local castingInfo = select(9, UnitCastingInfo('player'));
+        if castingInfo ~= LOADOUT_CAST_SPELL_ID then
+            self.updatePending = false;
+            self:SetTextIsSwitching(false);
+            self.eventFrame:UnregisterEvent('CONFIG_COMMIT_FAILED');
+        end
+    end);
 end
 
 function TLB:SelectSpec(specIndex)
@@ -490,51 +490,19 @@ function TLB:SelectLootSpec(specID)
     self:SetTextLootSpec(name, icon);
 end
 
---- @return PlayerSpellsFrame_TalentsFrame?
-function TLB:GetTalentFrame()
-    return PlayerSpellsFrame and PlayerSpellsFrame.TalentsFrame;
-end
-
---- @return PlayerSpellsFrame?
-function TLB:GetTalentFrameContainer()
-    return PlayerSpellsFrame;
-end
-
-function TLB:UpdateLastSelectedSavedConfigID(configID)
-    self.ignoreHook = true;
-    C_ClassTalents.UpdateLastSelectedSavedConfigID(PlayerUtil.GetCurrentSpecID(), configID);
-    self.ignoreHook = false;
-
-    -- this horrible workaround should not be needed once blizzard actually fires SELECTED_LOADOUT_CHANGED event
-    -- or you know.. realizes that it's possible for addons to change the loadout, but we can't do that without tainting all the things
-    local talentsTab = self:GetTalentFrame();
-    if not talentsTab then return; end
-    local dropdown = talentsTab.LoadSystem;
-    local _ = dropdown and dropdown.SetSelectionID and dropdown:SetSelectionID(configID);
-end
-
 function TLB:TRAIT_CONFIG_UPDATED(configID)
     if configID ~= C_ClassTalents.GetActiveConfigID() then return; end
     if self.updatePending then
         local pendingConfigID = self.pendingConfigID;
         local configName = self.configIDToName[pendingConfigID] or 'Unknown';
-        local pendingDisableStarterBuild = self.pendingDisableStarterBuild;
         RunNextFrame(function()
             self.updatePending = false;
-            if pendingDisableStarterBuild then
-                C_ClassTalents.SetStarterBuildActive(false);
-            end
-            self:UpdateLastSelectedSavedConfigID(pendingConfigID);
             self:SetTextLoadout(configName);
             self:SetTextIsSwitching(false);
-            self.updatePending, self.pendingDisableStarterBuild, self.pendingConfigID = false, false, nil;
+            self.updatePending = false;
+            self.pendingConfigID = nil;
 
             self:RefreshLoadoutText();
-            local frame = self:GetTalentFrameContainer();
-            if not InCombatLockdown() and frame and frame:IsShown() then
-                HideUIPanel(frame);
-                ShowUIPanel(frame);
-            end
         end);
 
         return;
@@ -542,39 +510,28 @@ function TLB:TRAIT_CONFIG_UPDATED(configID)
     RunNextFrame(function()
         self:RefreshLoadoutText();
     end);
+    self.eventFrame:UnregisterEvent('CONFIG_COMMIT_FAILED');
 end
 
 function TLB:CONFIG_COMMIT_FAILED(configID)
-    if configID ~= C_ClassTalents.GetActiveConfigID() then return; end
-    if self.updatePending then
-        local currentConfigID = self.currentConfigID;
-        local configName = self.configIDToName[currentConfigID] or 'Unknown';
-        RunNextFrame(function() -- next frame, because the default UI will overwrite anything we do here -.-
-            self.updatePending = false;
-            C_Traits.RollbackConfig(C_ClassTalents.GetActiveConfigID());
-            if currentConfigID == starterConfigID then
-                C_Timer.After(1, function()
-                    C_ClassTalents.SetStarterBuildActive(true);
-                    self:UpdateLastSelectedSavedConfigID(currentConfigID);
-                end);
-            end
-            self:UpdateLastSelectedSavedConfigID(currentConfigID);
-            self:SetTextLoadout(configName);
-            self:SetTextIsSwitching(false);
-
-            local frame = self:GetTalentFrameContainer();
-            if not InCombatLockdown() and frame and frame:IsShown() then
-                HideUIPanel(frame);
-                ShowUIPanel(frame);
-            end
-        end);
-        self.updatePending, self.pendingDisableStarterBuild, self.pendingConfigID = false, false, nil;
-    end
+    if not self.updatePending or configID ~= C_ClassTalents.GetActiveConfigID() then return; end
+    local currentConfigID = self.currentConfigID;
+    local configName = self.configIDToName[currentConfigID] or 'Unknown';
+    RunNextFrame(function()
+        self.updatePending = false;
+        self:SetTextLoadout(configName);
+        self:SetTextIsSwitching(false);
+    end);
+    self.updatePending = false;
+    self.pendingConfigID = nil;
+    self.eventFrame:UnregisterEvent('CONFIG_COMMIT_FAILED');
 end
 
 function TLB:SPELLS_CHANGED()
     self:RefreshLoadoutText();
     self:RefreshSpecText();
+    local configInfo = C_Traits.GetConfigInfo(C_ClassTalents.GetActiveConfigID());
+    self.treeID = configInfo and configInfo.treeIDs and configInfo.treeIDs[1];
 
     EventUtil.ContinueOnAddOnLoaded('TalentLoadoutManager', function()
         if not TalentLoadoutManagerAPI then return; end
@@ -591,6 +548,9 @@ function TLB:SPELLS_CHANGED()
 end
 
 function TLB:ACTIVE_PLAYER_SPECIALIZATION_CHANGED()
+    local configInfo = C_Traits.GetConfigInfo(C_ClassTalents.GetActiveConfigID());
+    self.treeID = configInfo and configInfo.treeIDs and configInfo.treeIDs[1];
+
     self:SetTextIsSwitching(false);
     self:RefreshLoadoutText();
     self:RefreshSpecText();
